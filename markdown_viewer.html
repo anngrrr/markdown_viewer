@@ -1,0 +1,574 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Markdown Viewer</title>
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <style>
+    :root {
+      --bg: #f7f7f8;
+      --panel: #ffffff;
+      --border: #dedee3;
+      --text: #222222;
+      --muted: #6b7280;
+      --accent: #2f6fed;
+      --accent-soft: #eaf0ff;
+      --shadow: 0 10px 30px rgba(0, 0, 0, 0.06);
+      --radius: 16px;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.5;
+    }
+
+    .app {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 24px;
+    }
+
+    .topbar {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 18px;
+      box-shadow: var(--shadow);
+      position: sticky;
+      top: 12px;
+      z-index: 20;
+    }
+
+    .title {
+      margin: 0 0 10px;
+      font-size: 24px;
+      line-height: 1.25;
+    }
+
+    .subtitle {
+      margin: 0 0 16px;
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    .controls {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      align-items: center;
+    }
+
+    .upload-label,
+    .action-btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 12px;
+      padding: 10px 14px;
+      border: 1px solid var(--border);
+      background: #fff;
+      cursor: pointer;
+      font-size: 14px;
+      color: var(--text);
+      transition: 0.2s ease;
+      text-decoration: none;
+    }
+
+    .upload-label:hover,
+    .action-btn:hover {
+      border-color: var(--accent);
+      background: var(--accent-soft);
+    }
+
+    .primary {
+      background: var(--accent);
+      color: #fff;
+      border-color: var(--accent);
+    }
+
+    .primary:hover {
+      filter: brightness(1.03);
+      background: var(--accent);
+    }
+
+    input[type="file"] {
+      display: none;
+    }
+
+    .tabs {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin: 18px 0 0;
+    }
+
+    .tab {
+      border: 1px solid var(--border);
+      background: #fff;
+      border-radius: 999px;
+      padding: 8px 14px;
+      cursor: pointer;
+      font-size: 14px;
+      transition: 0.2s ease;
+      max-width: 260px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .tab.active {
+      background: var(--accent-soft);
+      border-color: var(--accent);
+      color: var(--accent);
+      font-weight: 600;
+    }
+
+    .content-wrap {
+      margin-top: 18px;
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      min-height: 500px;
+      overflow: hidden;
+    }
+
+    .empty {
+      padding: 40px 24px;
+      text-align: center;
+      color: var(--muted);
+      font-size: 16px;
+    }
+
+    .toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      padding: 16px;
+      border-bottom: 1px solid var(--border);
+      background: #fcfcfd;
+    }
+
+    .viewer {
+      padding: 24px;
+      line-height: 1.65;
+      font-size: 17px;
+    }
+
+    .viewer p,
+    .viewer li,
+    .viewer blockquote {
+      line-height: 1.65;
+    }
+
+    .viewer code {
+      background: #f3f4f6;
+      padding: 2px 6px;
+      border-radius: 6px;
+      font-size: 0.92em;
+    }
+
+    .viewer pre {
+      background: #111827;
+      color: #f9fafb;
+      padding: 16px;
+      border-radius: 12px;
+      overflow-x: auto;
+    }
+
+    .viewer pre code {
+      background: transparent;
+      padding: 0;
+      color: inherit;
+    }
+
+    .viewer a {
+      color: var(--accent);
+    }
+
+    .viewer img {
+      max-width: 100%;
+      height: auto;
+      border-radius: 12px;
+    }
+
+    .viewer table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 16px 0;
+      font-size: 15px;
+    }
+
+    .viewer th,
+    .viewer td {
+      border: 1px solid var(--border);
+      padding: 10px 12px;
+      text-align: left;
+      vertical-align: top;
+    }
+
+    .section {
+      margin: 0 0 12px;
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      background: #fff;
+      overflow: hidden;
+    }
+
+    .section[open] {
+      box-shadow: 0 6px 20px rgba(0, 0, 0, 0.04);
+    }
+
+    .section-summary {
+      list-style: none;
+      cursor: pointer;
+      padding: 14px 16px;
+      background: #fafafa;
+      user-select: none;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      border-bottom: 1px solid transparent;
+    }
+
+    .section[open] > .section-summary {
+      border-bottom-color: var(--border);
+    }
+
+    .section-summary::-webkit-details-marker {
+      display: none;
+    }
+
+    .chevron {
+      width: 10px;
+      height: 10px;
+      border-right: 2px solid var(--muted);
+      border-bottom: 2px solid var(--muted);
+      transform: rotate(-45deg);
+      transition: transform 0.2s ease;
+      margin-top: -2px;
+      flex: 0 0 auto;
+    }
+
+    .section[open] > .section-summary .chevron {
+      transform: rotate(45deg);
+      margin-top: -6px;
+    }
+
+    .summary-text {
+      min-width: 0;
+    }
+
+    .summary-title {
+      font-weight: 650;
+      line-height: 1.35;
+      word-break: break-word;
+    }
+
+    .summary-meta {
+      color: var(--muted);
+      font-size: 12px;
+      margin-top: 2px;
+    }
+
+    .section-body {
+      padding: 16px 18px 18px;
+    }
+
+    .section-body > :first-child {
+      margin-top: 0;
+    }
+
+    .section-body > :last-child {
+      margin-bottom: 0;
+    }
+
+    .nested {
+      margin-top: 14px;
+      padding-left: 12px;
+      border-left: 2px solid #ececf1;
+    }
+
+    .file-meta {
+      padding: 12px 16px 0;
+      font-size: 13px;
+      color: var(--muted);
+    }
+
+    @media (max-width: 760px) {
+      .app {
+        padding: 14px;
+      }
+
+      .viewer {
+        padding: 16px;
+        font-size: 16px;
+      }
+
+      .tab {
+        max-width: 180px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <div class="topbar">
+      <h1 class="title">Markdown Viewer</h1>
+      <p class="subtitle">Загружай несколько Markdown-файлов, переключайся между ними как между вкладками и сворачивай разделы по заголовкам.</p>
+
+      <div class="controls">
+        <label class="upload-label primary" for="fileInput">Загрузить Markdown</label>
+        <input id="fileInput" type="file" accept=".md,.markdown,text/markdown" multiple />
+        <button class="action-btn" id="expandAllBtn" type="button">Развернуть всё</button>
+        <button class="action-btn" id="collapseAllBtn" type="button">Свернуть всё</button>
+      </div>
+
+      <div class="tabs" id="tabs"></div>
+    </div>
+
+    <div class="content-wrap">
+      <div id="emptyState" class="empty">
+        Пока ничего не загружено.<br />
+        Выбери один или несколько файлов `.md`.
+      </div>
+      <div id="contentArea" hidden>
+        <div class="toolbar">
+          <span class="action-btn" id="fileInfo">Файл не выбран</span>
+        </div>
+        <div class="viewer" id="viewer"></div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const fileInput = document.getElementById('fileInput');
+    const tabs = document.getElementById('tabs');
+    const viewer = document.getElementById('viewer');
+    const emptyState = document.getElementById('emptyState');
+    const contentArea = document.getElementById('contentArea');
+    const fileInfo = document.getElementById('fileInfo');
+    const expandAllBtn = document.getElementById('expandAllBtn');
+    const collapseAllBtn = document.getElementById('collapseAllBtn');
+
+    const state = {
+      files: [],
+      activeId: null,
+    };
+
+    fileInput.addEventListener('change', async (event) => {
+      const selectedFiles = Array.from(event.target.files || []);
+      if (!selectedFiles.length) return;
+
+      const loaded = await Promise.all(selectedFiles.map(readMarkdownFile));
+
+      loaded.forEach((fileData) => {
+        const existingIndex = state.files.findIndex((f) => f.name === fileData.name);
+        if (existingIndex >= 0) {
+          state.files[existingIndex] = fileData;
+        } else {
+          state.files.push(fileData);
+        }
+      });
+
+      state.activeId = loaded[0]?.id || state.activeId;
+      renderTabs();
+      renderActiveFile();
+      fileInput.value = '';
+    });
+
+    expandAllBtn.addEventListener('click', () => {
+      viewer.querySelectorAll('details.section').forEach((d) => {
+        d.open = true;
+      });
+    });
+
+    collapseAllBtn.addEventListener('click', () => {
+      viewer.querySelectorAll('details.section').forEach((d) => {
+        d.open = false;
+      });
+    });
+
+    function readMarkdownFile(file) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => {
+          const text = String(reader.result || '');
+          resolve({
+            id: crypto.randomUUID(),
+            name: file.name,
+            size: file.size,
+            text,
+            parsed: parseMarkdownToSections(text),
+          });
+        };
+        reader.onerror = reject;
+        reader.readAsText(file, 'utf-8');
+      });
+    }
+
+    function renderTabs() {
+      tabs.innerHTML = '';
+
+      state.files.forEach((file) => {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = `tab ${file.id === state.activeId ? 'active' : ''}`;
+        btn.textContent = file.name;
+        btn.title = file.name;
+        btn.addEventListener('click', () => {
+          state.activeId = file.id;
+          renderTabs();
+          renderActiveFile();
+        });
+        tabs.appendChild(btn);
+      });
+    }
+
+    function renderActiveFile() {
+      const active = state.files.find((f) => f.id === state.activeId);
+
+      if (!active) {
+        emptyState.hidden = false;
+        contentArea.hidden = true;
+        return;
+      }
+
+      emptyState.hidden = true;
+      contentArea.hidden = false;
+      fileInfo.textContent = `${active.name} - ${formatBytes(active.size)}`;
+      viewer.innerHTML = '';
+
+      if (!active.parsed.sections.length && active.parsed.looseHtml.trim()) {
+        viewer.innerHTML = active.parsed.looseHtml;
+        return;
+      }
+
+      if (active.parsed.looseHtml.trim()) {
+        const intro = document.createElement('div');
+        intro.className = 'file-meta';
+        intro.innerHTML = '<div>Верхний текст без заголовка:</div>';
+        viewer.appendChild(intro);
+
+        const introBody = document.createElement('div');
+        introBody.className = 'section';
+        introBody.style.padding = '16px 18px';
+        introBody.innerHTML = active.parsed.looseHtml;
+        viewer.appendChild(introBody);
+      }
+
+      active.parsed.sections.forEach((section) => {
+        viewer.appendChild(createSectionElement(section));
+      });
+    }
+
+    function parseMarkdownToSections(markdown) {
+      const tokens = marked.lexer(markdown);
+      const root = [];
+      const stack = [];
+      let looseTokens = [];
+
+      for (const token of tokens) {
+        if (token.type === 'heading') {
+          const section = {
+            title: token.text,
+            depth: token.depth,
+            tokens: [],
+            children: [],
+          };
+
+          while (stack.length && stack[stack.length - 1].depth >= section.depth) {
+            stack.pop();
+          }
+
+          if (stack.length) {
+            stack[stack.length - 1].children.push(section);
+          } else {
+            root.push(section);
+          }
+
+          stack.push(section);
+        } else if (stack.length) {
+          stack[stack.length - 1].tokens.push(token);
+        } else {
+          looseTokens.push(token);
+        }
+      }
+
+      return {
+        looseHtml: marked.parser(looseTokens),
+        sections: root.map(finalizeSection),
+      };
+    }
+
+    function finalizeSection(section) {
+      return {
+        ...section,
+        html: marked.parser(section.tokens),
+        children: section.children.map(finalizeSection),
+      };
+    }
+
+    function createSectionElement(section) {
+      const details = document.createElement('details');
+      details.className = 'section';
+      details.open = false;
+
+      const summary = document.createElement('summary');
+      summary.className = 'section-summary';
+      summary.innerHTML = `
+        <span class="chevron"></span>
+        <span class="summary-text">
+          <div class="summary-title">${escapeHtml(section.title)}</div>
+          <div class="summary-meta">Заголовок уровня H${section.depth}</div>
+        </span>
+      `;
+
+      const body = document.createElement('div');
+      body.className = 'section-body';
+
+      if (section.html.trim()) {
+        const content = document.createElement('div');
+        content.innerHTML = section.html;
+        body.appendChild(content);
+      }
+
+      if (section.children.length) {
+        const nested = document.createElement('div');
+        nested.className = 'nested';
+        section.children.forEach((child) => {
+          nested.appendChild(createSectionElement(child));
+        });
+        body.appendChild(nested);
+      }
+
+      details.appendChild(summary);
+      details.appendChild(body);
+      return details;
+    }
+
+    function formatBytes(bytes) {
+      if (bytes < 1024) return `${bytes} B`;
+      if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+      return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+    }
+
+    function escapeHtml(text) {
+      return text
+        .replaceAll('&', '&amp;')
+        .replaceAll('<', '&lt;')
+        .replaceAll('>', '&gt;')
+        .replaceAll('"', '&quot;')
+        .replaceAll("'", '&#039;');
+    }
+  </script>
+</body>
+</html>
