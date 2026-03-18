@@ -230,21 +230,6 @@
       overflow: hidden;
     }
 
-    body.reading-mode .app {
-      max-width: 100%;
-      padding: 12px;
-    }
-
-    body.reading-mode .topbar {
-      position: static;
-      margin-bottom: 10px;
-    }
-
-    body.reading-mode .content-wrap {
-      margin-top: 0;
-      border-radius: 18px;
-    }
-
     .empty {
       padding: 40px 24px;
       text-align: center;
@@ -261,22 +246,12 @@
       background: #fcfcfd;
     }
 
-    body.reading-mode .toolbar {
-      padding: 10px 14px;
-    }
-
     .viewer {
       padding: 24px;
       line-height: 1.7;
       font-size: 17px;
       max-width: 1320px;
       margin: 0 auto;
-    }
-
-    body.reading-mode .viewer {
-      max-width: none;
-      padding: 28px 32px;
-      font-size: 18px;
     }
 
     .viewer p,
@@ -495,11 +470,6 @@
         font-size: 16px;
       }
 
-      body.reading-mode .viewer {
-        padding: 18px 16px;
-        font-size: 16px;
-      }
-
       .tab {
         max-width: 100%;
       }
@@ -519,9 +489,11 @@
       <div class="controls">
         <label class="upload-label primary" for="fileInput">Загрузить Markdown</label>
         <input id="fileInput" type="file" accept=".md,.markdown,text/markdown" multiple />
+        <label class="upload-label" for="stateInput">Загрузить состояние</label>
+        <input id="stateInput" type="file" accept="application/json,.json" />
+        <button class="action-btn" id="saveStateBtn" type="button">Сохранить состояние</button>
         <button class="action-btn" id="expandAllBtn" type="button">Развернуть всё</button>
         <button class="action-btn" id="collapseAllBtn" type="button">Свернуть всё</button>
-        <button class="action-btn" id="readingModeBtn" type="button">Режим чтения</button>
       </div>
 
       <div class="tabs" id="tabs"></div>
@@ -543,6 +515,8 @@
 
   <script>
     const fileInput = document.getElementById('fileInput');
+    const stateInput = document.getElementById('stateInput');
+    const saveStateBtn = document.getElementById('saveStateBtn');
     const tabs = document.getElementById('tabs');
     const viewer = document.getElementById('viewer');
     const emptyState = document.getElementById('emptyState');
@@ -550,14 +524,12 @@
     const fileInfo = document.getElementById('fileInfo');
     const expandAllBtn = document.getElementById('expandAllBtn');
     const collapseAllBtn = document.getElementById('collapseAllBtn');
-    const readingModeBtn = document.getElementById('readingModeBtn');
     const topbar = document.querySelector('.topbar');
 
     const state = {
       files: [],
       activeId: null,
       renamingId: null,
-      readingMode: false,
       lastScrollY: window.scrollY,
       isHeaderCompact: false,
     };
@@ -567,7 +539,6 @@
       if (!selectedFiles.length) return;
 
       const loaded = await Promise.all(selectedFiles.map(readMarkdownFile));
-
       loaded.forEach((fileData) => {
         state.files.push(fileData);
       });
@@ -579,6 +550,39 @@
       renderTabs();
       renderActiveFile();
       fileInput.value = '';
+    });
+
+    stateInput.addEventListener('change', async (event) => {
+      const file = event.target.files?.[0];
+      if (!file) return;
+
+      try {
+        const text = await file.text();
+        const data = JSON.parse(text);
+        restoreState(data);
+      } catch (error) {
+        alert('Не удалось загрузить состояние. Проверь JSON-файл.');
+      }
+
+      stateInput.value = '';
+    });
+
+    saveStateBtn.addEventListener('click', () => {
+      if (!state.files.length) {
+        alert('Сначала загрузи хотя бы один Markdown-файл.');
+        return;
+      }
+
+      const payload = buildSerializableState();
+      const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `markdown-viewer-state-${formatDateForFileName(new Date())}.json`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
     });
 
     expandAllBtn.addEventListener('click', () => {
@@ -593,20 +597,7 @@
       });
     });
 
-    readingModeBtn.addEventListener('click', () => {
-      state.readingMode = !state.readingMode;
-      document.body.classList.toggle('reading-mode', state.readingMode);
-      readingModeBtn.textContent = state.readingMode ? 'Обычный режим' : 'Режим чтения';
-      if (state.readingMode) {
-        state.isHeaderCompact = false;
-        topbar.classList.remove('hidden-header');
-        topbar.classList.remove('compact');
-      }
-    });
-
     window.addEventListener('scroll', () => {
-      if (state.readingMode) return;
-
       const currentY = window.scrollY;
       const delta = currentY - state.lastScrollY;
       const compactThreshold = 80;
@@ -630,18 +621,27 @@
         const reader = new FileReader();
         reader.onload = () => {
           const text = String(reader.result || '');
-          resolve({
-            id: crypto.randomUUID(),
+          resolve(createFileRecord({
             name: file.name,
             displayName: file.name,
             size: file.size,
             text,
-            parsed: parseMarkdownToSections(text),
-          });
+          }));
         };
         reader.onerror = reject;
         reader.readAsText(file, 'utf-8');
       });
+    }
+
+    function createFileRecord({ name, displayName, size, text, id }) {
+      return {
+        id: id || crypto.randomUUID(),
+        name,
+        displayName: displayName || name,
+        size,
+        text,
+        parsed: parseMarkdownToSections(text),
+      };
     }
 
     function renderTabs() {
@@ -923,6 +923,47 @@
       node.replaceWith(wrapper);
     }
 
+    function buildSerializableState() {
+      return {
+        version: 1,
+        savedAt: new Date().toISOString(),
+        activeId: state.activeId,
+        files: state.files.map((file) => ({
+          id: file.id,
+          name: file.name,
+          displayName: file.displayName,
+          size: file.size,
+          text: file.text,
+        })),
+      };
+    }
+
+    function restoreState(data) {
+      if (!data || !Array.isArray(data.files)) {
+        throw new Error('Invalid state');
+      }
+
+      state.files = data.files.map((file) => createFileRecord({
+        id: file.id,
+        name: file.name || 'Untitled.md',
+        displayName: file.displayName || file.name || 'Untitled.md',
+        size: Number(file.size || 0),
+        text: String(file.text || ''),
+      }));
+
+      state.renamingId = null;
+      state.activeId = state.files.some((file) => file.id === data.activeId)
+        ? data.activeId
+        : state.files[0]?.id || null;
+
+      renderTabs();
+      renderActiveFile();
+      window.scrollTo({ top: 0, behavior: 'auto' });
+      state.isHeaderCompact = false;
+      topbar.classList.remove('hidden-header');
+      topbar.classList.remove('compact');
+    }
+
     function getPreviewText(node) {
       if (node.tagName === 'IMG') {
         return node.getAttribute('alt') || 'Изображение';
@@ -938,6 +979,15 @@
       if (bytes < 1024) return `${bytes} B`;
       if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
       return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+    }
+
+    function formatDateForFileName(date) {
+      const year = date.getFullYear();
+      const month = String(date.getMonth() + 1).padStart(2, '0');
+      const day = String(date.getDate()).padStart(2, '0');
+      const hours = String(date.getHours()).padStart(2, '0');
+      const minutes = String(date.getMinutes()).padStart(2, '0');
+      return `${year}-${month}-${day}_${hours}-${minutes}`;
     }
 
     function escapeHtml(text) {
