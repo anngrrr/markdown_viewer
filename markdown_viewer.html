@@ -67,7 +67,8 @@
     }
 
     .upload-label,
-    .action-btn {
+    .action-btn,
+    .toolbar-pill {
       display: inline-flex;
       align-items: center;
       justify-content: center;
@@ -86,6 +87,11 @@
     .action-btn:hover {
       border-color: var(--accent);
       background: var(--accent-soft);
+    }
+
+    .toolbar-pill {
+      cursor: default;
+      background: #fcfcfd;
     }
 
     .primary {
@@ -111,17 +117,18 @@
     }
 
     .tab {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
       border: 1px solid var(--border);
       background: #fff;
       border-radius: 999px;
-      padding: 8px 14px;
-      cursor: pointer;
+      padding: 6px 8px 6px 12px;
+      cursor: default;
       font-size: 14px;
       transition: 0.2s ease;
-      max-width: 260px;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
+      max-width: 360px;
+      min-width: 0;
     }
 
     .tab.active {
@@ -129,6 +136,68 @@
       border-color: var(--accent);
       color: var(--accent);
       font-weight: 600;
+    }
+
+    .tab-main {
+      display: inline-flex;
+      align-items: center;
+      min-width: 0;
+      flex: 1 1 auto;
+      background: transparent;
+      border: 0;
+      padding: 2px 0;
+      cursor: pointer;
+      color: inherit;
+      font: inherit;
+      text-align: left;
+    }
+
+    .tab-name {
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .tab-actions {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      flex: 0 0 auto;
+    }
+
+    .tab-icon-btn {
+      width: 26px;
+      height: 26px;
+      border: 1px solid transparent;
+      background: transparent;
+      border-radius: 999px;
+      cursor: pointer;
+      color: var(--muted);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 14px;
+      line-height: 1;
+      transition: 0.18s ease;
+    }
+
+    .tab-icon-btn:hover {
+      background: rgba(47, 111, 237, 0.08);
+      border-color: rgba(47, 111, 237, 0.12);
+      color: var(--accent);
+    }
+
+    .tab-rename-input {
+      min-width: 220px;
+      width: 100%;
+      border: 1px solid var(--accent);
+      background: #fff;
+      border-radius: 999px;
+      padding: 6px 10px;
+      font: inherit;
+      color: var(--text);
+      outline: none;
     }
 
     .content-wrap {
@@ -291,13 +360,6 @@
       word-break: break-word;
     }
 
-    .summary-meta,
-    .block-meta {
-      color: var(--muted);
-      font-size: 12px;
-      margin-top: 2px;
-    }
-
     .section-body {
       padding: 16px 18px 18px;
     }
@@ -316,10 +378,8 @@
       border-left: 2px solid #ececf1;
     }
 
-    .file-meta {
-      padding: 12px 16px 0;
-      font-size: 13px;
-      color: var(--muted);
+    .intro-block {
+      margin-bottom: 12px;
     }
 
     .block-fold {
@@ -337,10 +397,11 @@
     }
 
     .block-fold[open] > .block-summary {
-      padding: 6px 10px;
+      padding: 4px 8px;
       background: #ffffff;
       border-bottom: 1px dashed #ececf1;
       align-items: center;
+      min-height: 24px;
     }
 
     .block-content {
@@ -363,29 +424,18 @@
       word-break: break-word;
     }
 
-    .block-title-row {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 10px;
-      min-width: 0;
-    }
-
-    .block-open-label {
-      display: none;
-      font-size: 12px;
-      color: var(--muted);
-      white-space: nowrap;
-      flex: 0 0 auto;
-    }
-
-    .block-fold[open] > .block-summary .preview-text,
-    .block-fold[open] > .block-summary .block-meta {
+    .block-fold[open] > .block-summary .preview-text {
       display: none;
     }
 
-    .block-fold[open] > .block-summary .block-open-label {
-      display: inline;
+    .compact-open-row {
+      display: none;
+      height: 10px;
+      width: 100%;
+    }
+
+    .block-fold[open] > .block-summary .compact-open-row {
+      display: block;
     }
 
     @media (max-width: 760px) {
@@ -399,7 +449,11 @@
       }
 
       .tab {
-        max-width: 180px;
+        max-width: 100%;
+      }
+
+      .tab-rename-input {
+        min-width: 160px;
       }
     }
   </style>
@@ -427,7 +481,7 @@
       </div>
       <div id="contentArea" hidden>
         <div class="toolbar">
-          <span class="action-btn" id="fileInfo">Файл не выбран</span>
+          <span class="toolbar-pill" id="fileInfo">Файл не выбран</span>
         </div>
         <div class="viewer" id="viewer"></div>
       </div>
@@ -447,6 +501,7 @@
     const state = {
       files: [],
       activeId: null,
+      renamingId: null,
     };
 
     fileInput.addEventListener('change', async (event) => {
@@ -456,12 +511,7 @@
       const loaded = await Promise.all(selectedFiles.map(readMarkdownFile));
 
       loaded.forEach((fileData) => {
-        const existingIndex = state.files.findIndex((f) => f.name === fileData.name);
-        if (existingIndex >= 0) {
-          state.files[existingIndex] = fileData;
-        } else {
-          state.files.push(fileData);
-        }
+        state.files.push(fileData);
       });
 
       if (!state.activeId) {
@@ -474,14 +524,14 @@
     });
 
     expandAllBtn.addEventListener('click', () => {
-      viewer.querySelectorAll('details').forEach((d) => {
-        d.open = true;
+      viewer.querySelectorAll('details').forEach((item) => {
+        item.open = true;
       });
     });
 
     collapseAllBtn.addEventListener('click', () => {
-      viewer.querySelectorAll('details').forEach((d) => {
-        d.open = false;
+      viewer.querySelectorAll('details').forEach((item) => {
+        item.open = false;
       });
     });
 
@@ -493,6 +543,7 @@
           resolve({
             id: crypto.randomUUID(),
             name: file.name,
+            displayName: file.name,
             size: file.size,
             text,
             parsed: parseMarkdownToSections(text),
@@ -507,22 +558,123 @@
       tabs.innerHTML = '';
 
       state.files.forEach((file) => {
-        const btn = document.createElement('button');
-        btn.type = 'button';
-        btn.className = `tab ${file.id === state.activeId ? 'active' : ''}`;
-        btn.textContent = file.name;
-        btn.title = file.name;
-        btn.addEventListener('click', () => {
+        const tab = document.createElement('div');
+        tab.className = `tab ${file.id === state.activeId ? 'active' : ''}`;
+
+        if (state.renamingId === file.id) {
+          const input = document.createElement('input');
+          input.className = 'tab-rename-input';
+          input.type = 'text';
+          input.value = file.displayName || file.name;
+          input.setAttribute('aria-label', 'Переименовать вкладку');
+
+          input.addEventListener('keydown', (event) => {
+            if (event.key === 'Enter') {
+              commitTabRename(file.id, input.value);
+            }
+            if (event.key === 'Escape') {
+              state.renamingId = null;
+              renderTabs();
+            }
+          });
+
+          input.addEventListener('blur', () => {
+            commitTabRename(file.id, input.value);
+          });
+
+          tab.appendChild(input);
+          tabs.appendChild(tab);
+
+          requestAnimationFrame(() => {
+            input.focus();
+            input.select();
+          });
+          return;
+        }
+
+        const mainBtn = document.createElement('button');
+        mainBtn.type = 'button';
+        mainBtn.className = 'tab-main';
+        mainBtn.title = file.displayName || file.name;
+        mainBtn.addEventListener('click', () => {
           state.activeId = file.id;
           renderTabs();
           renderActiveFile();
         });
-        tabs.appendChild(btn);
+
+        const name = document.createElement('span');
+        name.className = 'tab-name';
+        name.textContent = file.displayName || file.name;
+        mainBtn.appendChild(name);
+
+        const actions = document.createElement('div');
+        actions.className = 'tab-actions';
+
+        const renameBtn = document.createElement('button');
+        renameBtn.type = 'button';
+        renameBtn.className = 'tab-icon-btn';
+        renameBtn.title = 'Переименовать';
+        renameBtn.textContent = '✎';
+        renameBtn.addEventListener('click', (event) => {
+          event.stopPropagation();
+          state.renamingId = file.id;
+          renderTabs();
+        });
+
+        const closeBtn = document.createElement('button');
+        closeBtn.type = 'button';
+        closeBtn.className = 'tab-icon-btn';
+        closeBtn.title = 'Закрыть';
+        closeBtn.textContent = '×';
+        closeBtn.addEventListener('click', (event) => {
+          event.stopPropagation();
+          closeTab(file.id);
+        });
+
+        actions.appendChild(renameBtn);
+        actions.appendChild(closeBtn);
+
+        tab.appendChild(mainBtn);
+        tab.appendChild(actions);
+        tabs.appendChild(tab);
       });
     }
 
+    function commitTabRename(fileId, nextName) {
+      const file = state.files.find((item) => item.id === fileId);
+      if (!file) return;
+
+      const trimmed = String(nextName || '').trim();
+      file.displayName = trimmed || file.name;
+      state.renamingId = null;
+      renderTabs();
+      renderActiveFile();
+    }
+
+    function closeTab(fileId) {
+      const index = state.files.findIndex((item) => item.id === fileId);
+      if (index < 0) return;
+
+      const wasActive = state.activeId === fileId;
+      state.files.splice(index, 1);
+
+      if (state.renamingId === fileId) {
+        state.renamingId = null;
+      }
+
+      if (!state.files.length) {
+        state.activeId = null;
+      } else if (wasActive) {
+        const fallback = state.files[Math.max(0, index - 1)] || state.files[0];
+        state.activeId = fallback.id;
+      }
+
+      renderTabs();
+      renderActiveFile();
+    }
+
     function renderActiveFile() {
-      const active = state.files.find((f) => f.id === state.activeId);
+      const active = state.files.find((item) => item.id === state.activeId);
 
       if (!active) {
         emptyState.hidden = false;
@@ -532,7 +684,7 @@
 
       emptyState.hidden = true;
       contentArea.hidden = false;
-      fileInfo.textContent = `${active.name} - ${formatBytes(active.size)} - открытых вкладок: ${state.files.length}`;
+      fileInfo.textContent = `${active.displayName || active.name} - ${formatBytes(active.size)} - открытых вкладок: ${state.files.length}`;
       viewer.innerHTML = '';
 
       if (!active.parsed.sections.length && active.parsed.looseHtml.trim()) {
@@ -544,14 +696,8 @@
       }
 
       if (active.parsed.looseHtml.trim()) {
-        const intro = document.createElement('div');
-        intro.className = 'file-meta';
-        intro.innerHTML = '<div>Верхний текст без заголовка:</div>';
-        viewer.appendChild(intro);
-
         const introBody = document.createElement('div');
-        introBody.className = 'section';
-        introBody.style.padding = '16px 18px';
+        introBody.className = 'intro-block';
         introBody.innerHTML = active.parsed.looseHtml;
         makeBlocksCollapsible(introBody);
         viewer.appendChild(introBody);
@@ -620,7 +766,6 @@
         <span class="chevron"></span>
         <span class="summary-text">
           <div class="summary-title">${escapeHtml(section.title)}</div>
-          <div class="summary-meta">Заголовок уровня H${section.depth}</div>
         </span>
       `;
 
@@ -653,16 +798,13 @@
 
       candidates.forEach((node) => {
         if (!shouldWrapNode(node)) return;
-        if (node.closest('.nested')) return;
         wrapNodeInCollapsible(node);
       });
     }
 
     function shouldWrapNode(node) {
       const tag = node.tagName;
-      return [
-        'P', 'UL', 'OL', 'PRE', 'BLOCKQUOTE', 'TABLE', 'IMG'
-      ].includes(tag);
+      return ['P', 'UL', 'OL', 'PRE', 'BLOCKQUOTE', 'TABLE', 'IMG'].includes(tag);
     }
 
     function wrapNodeInCollapsible(node) {
@@ -673,16 +815,12 @@
       const summary = document.createElement('summary');
       summary.className = 'block-summary';
 
-      const label = getNodeLabel(node);
       const preview = getPreviewText(node);
       summary.innerHTML = `
         <span class="chevron"></span>
         <span class="summary-text">
-          <span class="block-title-row">
-            <span class="preview-text">${escapeHtml(preview)}</span>
-            <span class="block-open-label">${label}</span>
-          </span>
-          <div class="block-meta">${label}</div>
+          <span class="preview-text">${escapeHtml(preview)}</span>
+          <span class="compact-open-row"></span>
         </span>
       `;
 
@@ -695,27 +833,13 @@
       node.replaceWith(wrapper);
     }
 
-    function getNodeLabel(node) {
-      const tag = node.tagName;
-      if (tag === 'P') return 'Абзац';
-      if (tag === 'UL' || tag === 'OL') return 'Список';
-      if (tag === 'PRE') return 'Код';
-      if (tag === 'BLOCKQUOTE') return 'Цитата';
-      if (tag === 'TABLE') return 'Таблица';
-      if (tag === 'IMG') return 'Изображение';
-      return 'Блок';
-    }
-
     function getPreviewText(node) {
       if (node.tagName === 'IMG') {
         return node.getAttribute('alt') || 'Изображение';
       }
 
-      const text = (node.textContent || '')
-        .replace(/\s+/g, ' ')
-        .trim();
-
-      if (!text) return 'Пустой блок';
+      const text = (node.textContent || '').replace(/\s+/g, ' ').trim();
+      if (!text) return '...';
       if (text.length <= 140) return text;
       return `${text.slice(0, 140)}...`;
     }
