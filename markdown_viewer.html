@@ -31,7 +31,7 @@
     }
 
     .app {
-      max-width: 1200px;
+      max-width: 1260px;
       margin: 0 auto;
       padding: 24px;
     }
@@ -159,14 +159,25 @@
 
     .viewer {
       padding: 24px;
-      line-height: 1.65;
+      line-height: 1.7;
       font-size: 17px;
     }
 
     .viewer p,
     .viewer li,
-    .viewer blockquote {
-      line-height: 1.65;
+    .viewer blockquote,
+    .viewer td,
+    .viewer th {
+      line-height: 1.7;
+    }
+
+    .viewer h1,
+    .viewer h2,
+    .viewer h3,
+    .viewer h4,
+    .viewer h5,
+    .viewer h6 {
+      line-height: 1.35;
     }
 
     .viewer code {
@@ -227,15 +238,19 @@
       box-shadow: 0 6px 20px rgba(0, 0, 0, 0.04);
     }
 
-    .section-summary {
+    .section-summary,
+    .block-summary {
       list-style: none;
       cursor: pointer;
-      padding: 14px 16px;
-      background: #fafafa;
       user-select: none;
       display: flex;
-      align-items: center;
+      align-items: flex-start;
       gap: 10px;
+    }
+
+    .section-summary {
+      padding: 14px 16px;
+      background: #fafafa;
       border-bottom: 1px solid transparent;
     }
 
@@ -243,7 +258,8 @@
       border-bottom-color: var(--border);
     }
 
-    .section-summary::-webkit-details-marker {
+    .section-summary::-webkit-details-marker,
+    .block-summary::-webkit-details-marker {
       display: none;
     }
 
@@ -254,17 +270,19 @@
       border-bottom: 2px solid var(--muted);
       transform: rotate(-45deg);
       transition: transform 0.2s ease;
-      margin-top: -2px;
+      margin-top: 5px;
       flex: 0 0 auto;
     }
 
-    .section[open] > .section-summary .chevron {
+    .section[open] > .section-summary .chevron,
+    .block-fold[open] > .block-summary .chevron {
       transform: rotate(45deg);
-      margin-top: -6px;
+      margin-top: 2px;
     }
 
     .summary-text {
       min-width: 0;
+      width: 100%;
     }
 
     .summary-title {
@@ -273,7 +291,8 @@
       word-break: break-word;
     }
 
-    .summary-meta {
+    .summary-meta,
+    .block-meta {
       color: var(--muted);
       font-size: 12px;
       margin-top: 2px;
@@ -303,6 +322,72 @@
       color: var(--muted);
     }
 
+    .block-fold {
+      margin: 10px 0;
+      border: 1px dashed #e5e7eb;
+      border-radius: 12px;
+      background: #fcfcfd;
+      overflow: hidden;
+    }
+
+    .block-summary {
+      padding: 10px 12px;
+      background: #fcfcfd;
+      transition: padding 0.18s ease, background 0.18s ease;
+    }
+
+    .block-fold[open] > .block-summary {
+      padding: 6px 10px;
+      background: #ffffff;
+      border-bottom: 1px dashed #ececf1;
+      align-items: center;
+    }
+
+    .block-content {
+      padding: 0 12px 12px;
+    }
+
+    .block-content > :first-child {
+      margin-top: 8px;
+    }
+
+    .block-content > :last-child {
+      margin-bottom: 0;
+    }
+
+    .preview-text {
+      display: block;
+      font-size: 14px;
+      line-height: 1.6;
+      color: #374151;
+      word-break: break-word;
+    }
+
+    .block-title-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      min-width: 0;
+    }
+
+    .block-open-label {
+      display: none;
+      font-size: 12px;
+      color: var(--muted);
+      white-space: nowrap;
+      flex: 0 0 auto;
+    }
+
+    .block-fold[open] > .block-summary .preview-text,
+    .block-fold[open] > .block-summary .block-meta {
+      display: none;
+    }
+
+    .block-fold[open] > .block-summary .block-open-label {
+      display: inline;
+    }
+
     @media (max-width: 760px) {
       .app {
         padding: 14px;
@@ -323,7 +408,7 @@
   <div class="app">
     <div class="topbar">
       <h1 class="title">Markdown Viewer</h1>
-      <p class="subtitle">Загружай несколько Markdown-файлов, переключайся между ними как между вкладками и сворачивай разделы по заголовкам.</p>
+      <p class="subtitle">Загружай несколько Markdown-файлов, держи их открытыми как вкладки и сворачивай как крупные разделы, так и отдельные блоки текста.</p>
 
       <div class="controls">
         <label class="upload-label primary" for="fileInput">Загрузить Markdown</label>
@@ -379,20 +464,23 @@
         }
       });
 
-      state.activeId = loaded[0]?.id || state.activeId;
+      if (!state.activeId) {
+        state.activeId = loaded[0]?.id || null;
+      }
+
       renderTabs();
       renderActiveFile();
       fileInput.value = '';
     });
 
     expandAllBtn.addEventListener('click', () => {
-      viewer.querySelectorAll('details.section').forEach((d) => {
+      viewer.querySelectorAll('details').forEach((d) => {
         d.open = true;
       });
     });
 
     collapseAllBtn.addEventListener('click', () => {
-      viewer.querySelectorAll('details.section').forEach((d) => {
+      viewer.querySelectorAll('details').forEach((d) => {
         d.open = false;
       });
     });
@@ -444,11 +532,14 @@
 
       emptyState.hidden = true;
       contentArea.hidden = false;
-      fileInfo.textContent = `${active.name} - ${formatBytes(active.size)}`;
+      fileInfo.textContent = `${active.name} - ${formatBytes(active.size)} - открытых вкладок: ${state.files.length}`;
       viewer.innerHTML = '';
 
       if (!active.parsed.sections.length && active.parsed.looseHtml.trim()) {
-        viewer.innerHTML = active.parsed.looseHtml;
+        const onlyContent = document.createElement('div');
+        onlyContent.innerHTML = active.parsed.looseHtml;
+        makeBlocksCollapsible(onlyContent);
+        viewer.appendChild(onlyContent);
         return;
       }
 
@@ -462,6 +553,7 @@
         introBody.className = 'section';
         introBody.style.padding = '16px 18px';
         introBody.innerHTML = active.parsed.looseHtml;
+        makeBlocksCollapsible(introBody);
         viewer.appendChild(introBody);
       }
 
@@ -474,7 +566,7 @@
       const tokens = marked.lexer(markdown);
       const root = [];
       const stack = [];
-      let looseTokens = [];
+      const looseTokens = [];
 
       for (const token of tokens) {
         if (token.type === 'heading') {
@@ -538,6 +630,7 @@
       if (section.html.trim()) {
         const content = document.createElement('div');
         content.innerHTML = section.html;
+        makeBlocksCollapsible(content);
         body.appendChild(content);
       }
 
@@ -553,6 +646,78 @@
       details.appendChild(summary);
       details.appendChild(body);
       return details;
+    }
+
+    function makeBlocksCollapsible(container) {
+      const candidates = Array.from(container.children);
+
+      candidates.forEach((node) => {
+        if (!shouldWrapNode(node)) return;
+        if (node.closest('.nested')) return;
+        wrapNodeInCollapsible(node);
+      });
+    }
+
+    function shouldWrapNode(node) {
+      const tag = node.tagName;
+      return [
+        'P', 'UL', 'OL', 'PRE', 'BLOCKQUOTE', 'TABLE', 'IMG'
+      ].includes(tag);
+    }
+
+    function wrapNodeInCollapsible(node) {
+      const wrapper = document.createElement('details');
+      wrapper.className = 'block-fold';
+      wrapper.open = false;
+
+      const summary = document.createElement('summary');
+      summary.className = 'block-summary';
+
+      const label = getNodeLabel(node);
+      const preview = getPreviewText(node);
+      summary.innerHTML = `
+        <span class="chevron"></span>
+        <span class="summary-text">
+          <span class="block-title-row">
+            <span class="preview-text">${escapeHtml(preview)}</span>
+            <span class="block-open-label">${label}</span>
+          </span>
+          <div class="block-meta">${label}</div>
+        </span>
+      `;
+
+      const content = document.createElement('div');
+      content.className = 'block-content';
+      content.appendChild(node.cloneNode(true));
+
+      wrapper.appendChild(summary);
+      wrapper.appendChild(content);
+      node.replaceWith(wrapper);
+    }
+
+    function getNodeLabel(node) {
+      const tag = node.tagName;
+      if (tag === 'P') return 'Абзац';
+      if (tag === 'UL' || tag === 'OL') return 'Список';
+      if (tag === 'PRE') return 'Код';
+      if (tag === 'BLOCKQUOTE') return 'Цитата';
+      if (tag === 'TABLE') return 'Таблица';
+      if (tag === 'IMG') return 'Изображение';
+      return 'Блок';
+    }
+
+    function getPreviewText(node) {
+      if (node.tagName === 'IMG') {
+        return node.getAttribute('alt') || 'Изображение';
+      }
+
+      const text = (node.textContent || '')
+        .replace(/\s+/g, ' ')
+        .trim();
+
+      if (!text) return 'Пустой блок';
+      if (text.length <= 140) return text;
+      return `${text.slice(0, 140)}...`;
     }
 
     function formatBytes(bytes) {
