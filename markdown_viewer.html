@@ -586,14 +586,28 @@
     });
 
     expandAllBtn.addEventListener('click', () => {
+      const active = getActiveFile();
+      if (!active) return;
+
       viewer.querySelectorAll('details').forEach((item) => {
         item.open = true;
+      });
+
+      viewer.querySelectorAll('details[data-state-key]').forEach((item) => {
+        active.viewState[item.dataset.stateKey] = true;
       });
     });
 
     collapseAllBtn.addEventListener('click', () => {
+      const active = getActiveFile();
+      if (!active) return;
+
       viewer.querySelectorAll('details').forEach((item) => {
         item.open = false;
+      });
+
+      viewer.querySelectorAll('details[data-state-key]').forEach((item) => {
+        active.viewState[item.dataset.stateKey] = false;
       });
     });
 
@@ -616,6 +630,10 @@
       state.lastScrollY = currentY;
     });
 
+    function getActiveFile() {
+      return state.files.find((item) => item.id === state.activeId) || null;
+    }
+
     function readMarkdownFile(file) {
       return new Promise((resolve, reject) => {
         const reader = new FileReader();
@@ -633,7 +651,7 @@
       });
     }
 
-    function createFileRecord({ name, displayName, size, text, id }) {
+    function createFileRecord({ name, displayName, size, text, id, viewState }) {
       return {
         id: id || crypto.randomUUID(),
         name,
@@ -641,6 +659,7 @@
         size,
         text,
         parsed: parseMarkdownToSections(text),
+        viewState: viewState && typeof viewState === 'object' ? { ...viewState } : {},
       };
     }
 
@@ -764,7 +783,7 @@
     }
 
     function renderActiveFile() {
-      const active = state.files.find((item) => item.id === state.activeId);
+      const active = getActiveFile();
 
       if (!active) {
         emptyState.hidden = false;
@@ -780,7 +799,7 @@
       if (!active.parsed.sections.length && active.parsed.looseHtml.trim()) {
         const onlyContent = document.createElement('div');
         onlyContent.innerHTML = active.parsed.looseHtml;
-        makeBlocksCollapsible(onlyContent);
+        makeBlocksCollapsible(onlyContent, active, 'loose');
         viewer.appendChild(onlyContent);
         return;
       }
@@ -789,12 +808,12 @@
         const introBody = document.createElement('div');
         introBody.className = 'intro-block';
         introBody.innerHTML = active.parsed.looseHtml;
-        makeBlocksCollapsible(introBody);
+        makeBlocksCollapsible(introBody, active, 'intro');
         viewer.appendChild(introBody);
       }
 
       active.parsed.sections.forEach((section) => {
-        viewer.appendChild(createSectionElement(section));
+        viewer.appendChild(createSectionElement(section, active));
       });
     }
 
@@ -833,22 +852,23 @@
 
       return {
         looseHtml: marked.parser(looseTokens),
-        sections: root.map(finalizeSection),
+        sections: root.map((section, index) => finalizeSection(section, [index])),
       };
     }
 
-    function finalizeSection(section) {
+    function finalizeSection(section, path) {
       return {
         ...section,
+        pathKey: `section:${path.join('.')}`,
         html: marked.parser(section.tokens),
-        children: section.children.map(finalizeSection),
+        children: section.children.map((child, index) => finalizeSection(child, [...path, index])),
       };
     }
 
-    function createSectionElement(section) {
+    function createSectionElement(section, file) {
       const details = document.createElement('details');
       details.className = 'section';
-      details.open = false;
+      bindDetailsState(details, file, section.pathKey, false);
 
       const summary = document.createElement('summary');
       summary.className = 'section-summary';
@@ -865,7 +885,7 @@
       if (section.html.trim()) {
         const content = document.createElement('div');
         content.innerHTML = section.html;
-        makeBlocksCollapsible(content);
+        makeBlocksCollapsible(content, file, section.pathKey);
         body.appendChild(content);
       }
 
@@ -873,7 +893,7 @@
         const nested = document.createElement('div');
         nested.className = 'nested';
         section.children.forEach((child) => {
-          nested.appendChild(createSectionElement(child));
+          nested.appendChild(createSectionElement(child, file));
         });
         body.appendChild(nested);
       }
@@ -883,12 +903,15 @@
       return details;
     }
 
-    function makeBlocksCollapsible(container) {
+    function makeBlocksCollapsible(container, file, parentKey) {
       const candidates = Array.from(container.children);
+      let blockIndex = 0;
 
       candidates.forEach((node) => {
         if (!shouldWrapNode(node)) return;
-        wrapNodeInCollapsible(node);
+        const blockKey = `${parentKey}:block:${blockIndex}`;
+        blockIndex += 1;
+        wrapNodeInCollapsible(node, file, blockKey);
       });
     }
 
@@ -897,10 +920,10 @@
       return ['P', 'UL', 'OL', 'PRE', 'BLOCKQUOTE', 'TABLE', 'IMG'].includes(tag);
     }
 
-    function wrapNodeInCollapsible(node) {
+    function wrapNodeInCollapsible(node, file, stateKey) {
       const wrapper = document.createElement('details');
       wrapper.className = 'block-fold';
-      wrapper.open = false;
+      bindDetailsState(wrapper, file, stateKey, false);
 
       const summary = document.createElement('summary');
       summary.className = 'block-summary';
@@ -923,9 +946,20 @@
       node.replaceWith(wrapper);
     }
 
+    function bindDetailsState(details, file, stateKey, defaultOpen) {
+      details.dataset.stateKey = stateKey;
+      details.open = Object.prototype.hasOwnProperty.call(file.viewState, stateKey)
+        ? Boolean(file.viewState[stateKey])
+        : defaultOpen;
+
+      details.addEventListener('toggle', () => {
+        file.viewState[stateKey] = details.open;
+      });
+    }
+
     function buildSerializableState() {
       return {
-        version: 1,
+        version: 2,
         savedAt: new Date().toISOString(),
         activeId: state.activeId,
         files: state.files.map((file) => ({
@@ -934,6 +968,7 @@
           displayName: file.displayName,
           size: file.size,
           text: file.text,
+          viewState: file.viewState,
         })),
       };
     }
@@ -949,6 +984,7 @@
         displayName: file.displayName || file.name || 'Untitled.md',
         size: Number(file.size || 0),
         text: String(file.text || ''),
+        viewState: file.viewState,
       }));
 
       state.renamingId = null;
